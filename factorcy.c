@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #if defined(_WIN32)
     #include <windows.h>
     #define sleep_ms(ms) Sleep(ms)
@@ -17,7 +18,7 @@
 // ============================
 
 // ========== TYPES ===========
-typedef enum { TILE_EMPTY, TILE_MINER, TILE_BELT, TILE_CHEST } TileType;
+typedef enum { TILE_EMPTY, TILE_MINER, TILE_BELT, TILE_CHEST, TILE_ROCK} TileType;
 typedef enum { DIR_NORTH, DIR_EAST, DIR_SOUTH, DIR_WEST } Direction;
 typedef enum { ITEM_NONE, ITEM_IRON_ORE } ItemType;
 
@@ -43,6 +44,7 @@ typedef struct {
 // ========== GLOBALS =========
 Tile map[HEIGHT][WIDTH];
 int chest_item_count = 0;
+unsigned int seed;
 
 // Direction -> coordinate offset (indexed by Direction enum)
 //                         N   E  S  W
@@ -63,6 +65,10 @@ void init_map(void) {
             map[y][x].belt_inv.count = 0;
             map[y][x].belt_inv.head = 0;
             map[y][x].belt_inv.tail = 0;
+
+            if (rand() % 100 < 25) {
+                map[y][x].type = TILE_ROCK;
+            }
         }
     }
 
@@ -218,6 +224,9 @@ void render(void) {
                 case TILE_CHEST:
                     printf("[C]");
                     break;
+                case TILE_ROCK:
+                    printf(" # ");
+                    break;
                 default:
                     printf(" . ");
                     break;
@@ -227,6 +236,7 @@ void render(void) {
     }
     
     printf("\nKey: [M] Drill | ^ > v < Conveyor | (n) Items | [C] Chest\n");
+    printf("\nSeed: %u\n", seed);
     printf("------------------------------------------------------------\n");
     printf("Controls:\n");
     printf("  1                            - Next tick\n");
@@ -245,6 +255,21 @@ void add_tile(int y, int x, TileType type, Direction dir){
 
 // ========== MAIN ============
 int main(void) {
+    int choice;
+
+    printf("1. Random seed (time)\n");
+    printf("2. Custom seed\n");
+    printf("Your choice: ");
+    scanf("%d", &choice);
+
+    if (choice == 1) {
+        seed = (unsigned int)time(NULL);
+    } else {
+        printf("Enter digital seed: ");
+        scanf("%u", &seed);
+    }
+    srand(seed); 
+
     init_map();
     render();
 
@@ -273,7 +298,6 @@ int main(void) {
 
         update_game();
         render();
-        // sleep_ms(DELAY);
     }
     return 0;
 }
