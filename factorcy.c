@@ -9,65 +9,184 @@
     #define sleep_ms(ms) usleep((ms) * 1000)
 #endif
 
+// ========== CONFIG ==========
 #define WIDTH 20
-#define HEIGHT 10
+#define HEIGHT 15
+#define BELT_CAPACITY 2
+#define DELAY 600
+// ============================
 
-typedef enum {
-    TILE_EMPTY,
-    TILE_MINER,
-    TILE_BELT_RIGHT,
-    TILE_CHEST
-} TileType;
+// ========== TYPES ===========
+typedef enum { TILE_EMPTY, TILE_MINER, TILE_BELT, TILE_CHEST } TileType;
+typedef enum { DIR_NORTH, DIR_EAST, DIR_SOUTH, DIR_WEST } Direction;
+typedef enum { ITEM_NONE, ITEM_IRON_ORE } ItemType;
 
 typedef struct {
+    ItemType type;
+    int amount;
+} Item;
+
+typedef struct {
+    Item items[BELT_CAPACITY];
+    int head;
+    int tail;
+    int count;
+} BeltInventory;
+
+// Level 3: one map cell
+typedef struct {
     TileType type;
-    bool has_ore;
+    Direction dir;
+    int arrived;
+    BeltInventory belt_inv;
 } Tile;
 
+// ========== GLOBALS =========
 Tile map[HEIGHT][WIDTH];
 int chest_item_count = 0;
 
+// Direction -> coordinate offset (indexed by Direction enum)
+//                         N   E  S  W
+static const int dy[4] = { -1, 0, 1, 0 };
+static const int dx[4] = {  0, 1, 0, -1 };
+
+// Direction -> belt symbol for rendering
+static const char *belt_arrow[4] = { " ^ ", " > ", " v ", " < " };
+
+// ========== MAP =============
 void init_map(void) {
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             map[y][x].type = TILE_EMPTY;
-            map[y][x].has_ore = false;
+            map[y][x].dir = DIR_NORTH;
+            map[y][x].arrived = 0;
+
+            map[y][x].belt_inv.count = 0;
+            map[y][x].belt_inv.head = 0;
+            map[y][x].belt_inv.tail = 0;
         }
     }
 
+    map[2][2].type = TILE_MINER;
+    map[2][2].dir = DIR_EAST;
+    
+    map[5][16].type = TILE_MINER;
+    map[5][16].dir = DIR_WEST;
 
-    map[2][1].type = TILE_MINER;
-    map[2][2].type = TILE_BELT_RIGHT;
-    map[2][3].type = TILE_BELT_RIGHT;
-    map[2][4].type = TILE_BELT_RIGHT;
-    map[2][5].type = TILE_BELT_RIGHT;
-    map[2][6].type = TILE_BELT_RIGHT;
-    map[2][7].type = TILE_BELT_RIGHT;
-    map[2][8].type = TILE_CHEST;
+    map[10][8].type = TILE_MINER;
+    map[10][8].dir = DIR_NORTH;
+
+    for (int x = 3; x <= 7; x++) {
+        map[2][x].type = TILE_BELT;
+        map[2][x].dir = DIR_EAST;
+    }
+
+    for (int y = 2; y <= 4; y++) {
+        map[y][8].type = TILE_BELT;
+        map[y][8].dir = DIR_SOUTH;
+    }
+
+    for (int x = 9; x <= 15; x++) {
+        map[5][x].type = TILE_BELT;
+        map[5][x].dir = DIR_WEST;
+    }
+
+    for (int y = 6; y <= 9; y++) {
+        map[y][8].type = TILE_BELT;
+        map[y][8].dir = DIR_NORTH;
+    }
+
+    map[5][8].type = TILE_CHEST;
+}
+
+// ========== UPDATE ==========
+
+void belt_push(BeltInventory *inv, Item item) {
+    inv->items[inv->tail] = item;
+    inv->tail = (inv->tail + 1) % BELT_CAPACITY;
+    inv->count++;
+}
+
+Item belt_pop(BeltInventory *inv) {
+    Item item = inv->items[inv->head];
+    inv->head = (inv->head + 1) % BELT_CAPACITY;
+    inv->count--;
+    return item;
+}
+
+void update_miner(int y, int x) {
+    Tile *miner = &map[y][x];
+
+    int target_y = y + dy[miner->dir];
+    int target_x = x + dx[miner->dir];
+
+    if (target_y < 0 || target_y >= HEIGHT || target_x < 0 || target_x >= WIDTH) {
+        return;
+    }
+
+    Tile *target_tile = &map[target_y][target_x];
+
+    if (target_tile->type == TILE_BELT && target_tile->belt_inv.count < BELT_CAPACITY) {
+        Item new_ore = { ITEM_IRON_ORE, 1 };
+        belt_push(&target_tile->belt_inv, new_ore);
+        target_tile->arrived++;
+    }
+}
+
+void update_belt(int y, int x) {
+    Tile *belt = &map[y][x];
+
+    if (belt->belt_inv.count == 0) {
+        return;
+    }
+
+    if (belt->belt_inv.count <= belt->arrived) {
+        return;
+    }
+
+    int target_y = y + dy[belt->dir];
+    int target_x = x + dx[belt->dir];
+    if (target_y < 0 || target_y >= HEIGHT || target_x < 0 || target_x >= WIDTH) {
+        return;
+    }
+
+    Tile *target_tile = &map[target_y][target_x];
+
+    if (target_tile->type == TILE_BELT && target_tile->belt_inv.count < BELT_CAPACITY) {
+        belt_push(&target_tile->belt_inv, belt_pop(&belt->belt_inv));
+        target_tile->arrived++;
+    }
+    else if (target_tile->type == TILE_CHEST) {
+        Item item = belt_pop(&belt->belt_inv);
+        chest_item_count += item.amount;
+    }
 }
 
 void update_game(void) {
-    for (int x = WIDTH - 2; x >= 1; x--) {
-        if (map[2][x].type == TILE_BELT_RIGHT && map[2][x].has_ore) {
-            Tile *next_tile = &map[2][x + 1];
-
-            if (next_tile->type == TILE_BELT_RIGHT && !next_tile->has_ore) {
-                next_tile->has_ore = true;
-                map[2][x].has_ore = false;
-            } else if (next_tile->type == TILE_CHEST) {
-                chest_item_count++;
-                map[2][x].has_ore = false;
-            }
+    // Reset arrival counters at the start of every tick
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            map[y][x].arrived = 0;
         }
     }
 
-    if (map[2][1].type == TILE_MINER) {
-        if (map[2][2].type == TILE_BELT_RIGHT && !map[2][2].has_ore) {
-            map[2][2].has_ore = true;
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            switch (map[y][x].type) {
+                case TILE_MINER:
+                    update_miner(y, x);
+                    break;
+                case TILE_BELT:
+                    update_belt(y, x);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }
 
+// ========== RENDER ==========
 void render(void) {
     printf("\033[H\033[J");
 
@@ -76,14 +195,13 @@ void render(void) {
 
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
-            Tile t = map[y][x];
-
-            switch (t.type) {
+            switch (map[y][x].type) {
                 case TILE_MINER:
                     printf("[M]");
                     break;
-                case TILE_BELT_RIGHT:
-                    printf(t.has_ore ? "(o)" : " > ");
+                case TILE_BELT:
+                    if (map[y][x].belt_inv.count == 0) printf("%s", belt_arrow[map[y][x].dir]);
+                    else                               printf("(%d)", map[y][x].belt_inv.count);
                     break;
                 case TILE_CHEST:
                     printf("[C]");
@@ -95,22 +213,46 @@ void render(void) {
         }
         printf("\n");
     }
-    printf("\nKey: [M] Drill |  >  Conveyor | (o) Ore | [C] Chest\n");
+    printf("\nKey: [M] Drill | ^ > v < Conveyor | (n) Items on belt | [C] Chest\n");
+    printf("Enter 1 for the next tick, anything else to quit: ");
 }
 
+void add_tile(int y, int x, TileType type, Direction dir){
+    map[y][x].type = type;
+    map[y][x].dir = dir;
+}
+
+// ========== MAIN ============
 int main(void) {
     init_map();
+    render();
 
-    while (1) {
+    bool running = true;
+    while (running) {
+        char mode;
+        scanf(" %c", &mode);
+
+        switch (mode) {
+            case '1':
+                break;
+
+            case 'a': {
+                int y, x, t, d;
+                scanf("%d %d %d %d", &y, &x, &t, &d);
+                add_tile(y, x, t, d);
+                break;
+            }
+
+            default:
+                running = false;
+                break;
+        }
+
+        if (!running) break;
+
         update_game();
         render();
-        sleep_ms(300);
-        if(chest_item_count == 10){
-            break;
-        }
+        // sleep_ms(DELAY);
     }
-    int i;
-    scanf("%d", &i);
-
     return 0;
 }
