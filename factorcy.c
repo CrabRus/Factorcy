@@ -33,7 +33,6 @@ typedef struct {
     int count;
 } BeltInventory;
 
-// Level 3: one map cell
 typedef struct {
     TileType type;
     Direction dir;
@@ -193,7 +192,20 @@ void render(void) {
     printf("=== MINIMAL FACTORIO SIMULATOR (C) ===\n");
     printf("Items in a chest: %d\n\n", chest_item_count);
 
+    printf("     ");
+    for (int x = 0; x < WIDTH; x++) {
+        printf("%2d ", x);
+    }
+    printf("\n   --");
+    for (int x = 0; x < WIDTH; x++) {
+        printf("---");
+    }
+    printf("\n");
+
     for (int y = 0; y < HEIGHT; y++) {
+        
+        printf("%2d | ", y);
+
         for (int x = 0; x < WIDTH; x++) {
             switch (map[y][x].type) {
                 case TILE_MINER:
@@ -213,8 +225,17 @@ void render(void) {
         }
         printf("\n");
     }
-    printf("\nKey: [M] Drill | ^ > v < Conveyor | (n) Items on belt | [C] Chest\n");
-    printf("Enter 1 for the next tick, anything else to quit: ");
+    
+    printf("\nKey: [M] Drill | ^ > v < Conveyor | (n) Items | [C] Chest\n");
+    printf("------------------------------------------------------------\n");
+    printf("Controls:\n");
+    printf("  1                            - Next tick\n");
+    printf("  a <y> <x> <type> <direction> - Add object to the map\n");
+    printf("       [Type]: 0=Empty, 1=Drill, 2=Conveyor, 3=Chest\n");
+    printf("       [Direction]: 0=North, 1=East, 2=South, 3=West\n");
+    printf("  Any other key                - Quit\n");
+    printf("------------------------------------------------------------\n");
+    printf("Input: ");
 }
 
 void add_tile(int y, int x, TileType type, Direction dir){
@@ -236,7 +257,7 @@ int main(void) {
             case '1':
                 break;
 
-            case 'a': {
+        case 'a': {
                 int y, x, t, d;
                 scanf("%d %d %d %d", &y, &x, &t, &d);
                 add_tile(y, x, t, d);
