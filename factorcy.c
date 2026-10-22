@@ -9,6 +9,27 @@
     #include <unistd.h>
     #define sleep_ms(ms) usleep((ms) * 1000)
 #endif
+#if defined(_WIN32)
+void enable_ansi(void) {
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode;
+    GetConsoleMode(h, &mode);
+    SetConsoleMode(h, mode | 0x0004); // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+}
+#else
+void enable_ansi(void) {}
+#endif
+
+// ========== COLORS (ANSI, 256-color mode) ==========
+// Format: background + foreground. Change the numbers (0-255) to taste.
+#define C_RESET    "\033[0m"
+#define C_EMPTY    "\033[48;5;236m\033[38;5;240m"  // dark gray, dim dot
+#define C_ROCK     "\033[48;5;243m\033[38;5;250m"  // light gray
+#define C_MINER    "\033[48;5;160m\033[38;5;231m"  // red, white text
+#define C_BELT     "\033[48;5;24m\033[38;5;231m"   // dark blue, white arrow
+#define C_BELT_ORE "\033[48;5;214m\033[38;5;16m"   // orange, black count
+#define C_CHEST    "\033[48;5;94m\033[38;5;231m"   // brown, white text
+#define C_AXIS     "\033[38;5;245m"                // gray axis numbers
 
 // ========== CONFIG ==========
 #define WIDTH 20
@@ -198,44 +219,48 @@ void render(void) {
     printf("=== MINIMAL FACTORIO SIMULATOR (C) ===\n");
     printf("Items in a chest: %d\n\n", chest_item_count);
 
-    printf("     ");
+    // Column numbers
+    printf(C_AXIS "     ");
     for (int x = 0; x < WIDTH; x++) {
         printf("%2d ", x);
     }
-    printf("\n   --");
-    for (int x = 0; x < WIDTH; x++) {
-        printf("---");
-    }
-    printf("\n");
+    printf(C_RESET "\n");
 
     for (int y = 0; y < HEIGHT; y++) {
-        
-        printf("%2d | ", y);
+        // Row number
+        printf(C_AXIS "%2d" C_RESET "   ", y);
 
         for (int x = 0; x < WIDTH; x++) {
             switch (map[y][x].type) {
                 case TILE_MINER:
-                    printf("[M]");
+                    printf(C_MINER " M " C_RESET);
                     break;
                 case TILE_BELT:
-                    if (map[y][x].belt_inv.count == 0) printf("%s", belt_arrow[map[y][x].dir]);
-                    else                               printf("(%d)", map[y][x].belt_inv.count);
+                    if (map[y][x].belt_inv.count == 0)
+                        printf(C_BELT "%s" C_RESET, belt_arrow[map[y][x].dir]);
+                    else
+                        printf(C_BELT_ORE "(%d)" C_RESET, map[y][x].belt_inv.count);
                     break;
                 case TILE_CHEST:
-                    printf("[C]");
+                    printf(C_CHEST " C " C_RESET);
                     break;
                 case TILE_ROCK:
-                    printf(" # ");
+                    printf(C_ROCK " # " C_RESET);
                     break;
                 default:
-                    printf(" . ");
+                    printf(C_EMPTY " . " C_RESET);
                     break;
             }
         }
         printf("\n");
     }
-    
-    printf("\nKey: [M] Drill | ^ > v < Conveyor | (n) Items | [C] Chest\n");
+
+    // Legend uses the same colors as the map
+    printf("\nKey: " C_MINER " M " C_RESET " Drill  "
+                    C_BELT " > " C_RESET " Conveyor  "
+                    C_BELT_ORE "(n)" C_RESET " Items  "
+                    C_CHEST " C " C_RESET " Chest  "
+                    C_ROCK " # " C_RESET " Rock\n");
     printf("\nSeed: %u\n", seed);
     printf("------------------------------------------------------------\n");
     printf("Controls:\n");
